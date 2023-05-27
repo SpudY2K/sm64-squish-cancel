@@ -2253,7 +2253,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
     }
 }
 
-void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame2Angle, int slideCameraYaw, Vec3f lakituPosition, Polygon* ch, bool* validCameraAngle, int slopeAngle, float accel, float steepness, struct SlideSetup* slidingSetupsGPU, struct StrainSetup* strainSetupsGPU, struct StrainNode** strainLookupGPU, int* nStrainNodesGPU, struct StickNode* stickLookup, const float minSpeed, const float maxSpeed, int nThreads, ofstream& wf) {
+void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame2Angle, int minFallAngle, int maxFallAngle, int slideCameraYaw, Vec3f lakituPosition, Polygon* ch, bool* validCameraAngle, int slopeAngle, float accel, float steepness, struct SlideSetup* slidingSetupsGPU, struct StrainSetup* strainSetupsGPU, struct StrainNode** strainLookupGPU, int* nStrainNodesGPU, struct StickNode* stickLookup, const float minSpeed, const float maxSpeed, int nThreads, ofstream& wf) {
     int finalSlideYaw = atan2s(zVel0, xVel0);
     int newFacingDYaw = (short)(frame2Angle - finalSlideYaw);
 
@@ -2342,7 +2342,7 @@ void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame
         struct Polygon* chG;
         copy_polygon_to_gpu(ch, chG);
 
-        for (int s = 0; s < 65536; s += 16) {
+        for (int s = minFallAngle; s <= maxFallAngle; s += 16) {
             int slideYaw = s % 65536;
 
             for (int i = minCameraIdx; i <= maxCameraIdx; i++) {
@@ -3012,6 +3012,9 @@ int main()
     
     int frame2Angle = 1992;
 
+    int minFallAngle = 0;
+    int maxFallAngle = 65535;
+
     const float accel = 7.0f;
     const float minStartSpeed = 0.0f;
     const float maxStartSpeed = 20.0f;
@@ -3214,7 +3217,7 @@ int main()
                             if (validCameraAngle[slideCameraYaw]) {
                                 generate_stick_lookup(stickLookup, slideCameraYaw);
 
-                                find_slide_setups(vels[2 * j], vels[2 * j + 1], departureSpeed, frame2Angle, slideCameraYaw, lakituPosition, &ch, validCameraAngle, slopeAngle, accel, steepness, slidingSetupsGPU, strainSetupsGPU, strainLookupGPU, nStrainNodesGPU, stickLookup, minStartSpeed, maxStartSpeed, nThreads, wf);
+                                find_slide_setups(vels[2 * j], vels[2 * j + 1], departureSpeed, frame2Angle, minFallAngle, maxFallAngle, slideCameraYaw, lakituPosition, &ch, validCameraAngle, slopeAngle, accel, steepness, slidingSetupsGPU, strainSetupsGPU, strainLookupGPU, nStrainNodesGPU, stickLookup, minStartSpeed, maxStartSpeed, nThreads, wf);
 
                                 free_stick_lookup(stickLookup);
                             }
