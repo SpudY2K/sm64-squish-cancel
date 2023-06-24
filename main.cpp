@@ -650,11 +650,9 @@ __device__ int find_floorG(float* position, SurfaceG** floor, float& floor_y, Su
 }
 
 
-int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
-    short baseCameraYaw = -16384;
+int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition, short baseCameraYaw, short faceAngle, float currentFloorY) {
     float baseCameraDist = 1400.0;
     short baseCameraPitch = 0x05B0;
-    short baseCameraFaceAngle = 24576;
 
     SurfaceC* floor;
     float floorY;
@@ -674,10 +672,36 @@ int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
         }
     }
 
+    float posMul = 1.f;
+    float posBound = 200.f;
+    //float posBound = 1200.f; //pole
+    float focMul = 0.9f;
+    float focBound = 200.f;
+
+    float posY = (currentFloorY - currentPosition[1]) * posMul;
+
+    if (posY > posBound) {
+        posY = posBound;
+    }
+
+    if (posY < -posBound) {
+        posY = -posBound;
+    }
+
+    float focusY = (currentFloorY - currentPosition[1]) * focMul;
+
+    if (focusY > focBound) {
+        focusY = focBound;
+    }
+
+    if (focusY < -focBound) {
+        focusY = -focBound;
+    }
+
     baseCameraPitch = baseCameraPitch + 2304;
 
     float cameraPos[3] = { currentPosition[0] + baseCameraDist * gCosineTable[((65536 + (int)baseCameraPitch) % 65536) >> 4] * gSineTable[((65536 + (int)baseCameraYaw) % 65536) >> 4],
-                       currentPosition[1] + 125.0f + baseCameraDist * gSineTable[((65536 + (int)baseCameraPitch) % 65536) >> 4],
+                       currentPosition[1] + posY + 125.0f + baseCameraDist * gSineTable[((65536 + (int)baseCameraPitch) % 65536) >> 4],
                        currentPosition[2] + baseCameraDist * gCosineTable[((65536 + (int)baseCameraPitch) % 65536) >> 4] * gCosineTable[((65536 + (int)baseCameraYaw) % 65536) >> 4]
     };
 
@@ -686,7 +710,7 @@ int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
 
     // Get distance and angle from camera to Mario.
     float dx = currentPosition[0] - cameraPos[0];
-    float dy = currentPosition[1] + 125.0f;
+    float dy = currentPosition[1] - cameraPos[1];
     float dz = currentPosition[2] - cameraPos[2];
 
     float cameraDist = sqrtf(dx * dx + dy * dy + dz * dz);
@@ -700,8 +724,8 @@ int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
     temp[1] = pan[1];
     temp[2] = pan[2];
 
-    pan[0] = temp[2] * gSineTable[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4] + temp[0] * gCosineTable[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4];
-    pan[2] = temp[2] * gCosineTable[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4] + temp[0] * gSineTable[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4];
+    pan[0] = temp[2] * gSineTable[((65536 + (int)faceAngle) % 65536) >> 4] + temp[0] * gCosineTable[((65536 + (int)faceAngle) % 65536) >> 4];
+    pan[2] = temp[2] * gCosineTable[((65536 + (int)faceAngle) % 65536) >> 4] - temp[0] * gSineTable[((65536 + (int)faceAngle) % 65536) >> 4];
 
     // rotate in the opposite direction
     cameraYaw = -cameraYaw;
@@ -711,7 +735,7 @@ int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
     temp[2] = pan[2];
 
     pan[0] = temp[2] * gSineTable[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gCosineTable[((65536 + (int)cameraYaw) % 65536) >> 4];
-    pan[2] = temp[2] * gCosineTable[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gSineTable[((65536 + (int)cameraYaw) % 65536) >> 4];
+    pan[2] = temp[2] * gCosineTable[((65536 + (int)cameraYaw) % 65536) >> 4] - temp[0] * gSineTable[((65536 + (int)cameraYaw) % 65536) >> 4];
 
     // Only pan left or right
     pan[2] = 0.f;
@@ -719,18 +743,19 @@ int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
     cameraYaw = -cameraYaw;
 
     temp[0] = pan[0];
+    //temp[0] = -pan[0]; //pole
     temp[1] = pan[1];
     temp[2] = pan[2];
 
     pan[0] = temp[2] * gSineTable[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gCosineTable[((65536 + (int)cameraYaw) % 65536) >> 4];
-    pan[2] = temp[2] * gCosineTable[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gSineTable[((65536 + (int)cameraYaw) % 65536) >> 4];
+    pan[2] = temp[2] * gCosineTable[((65536 + (int)cameraYaw) % 65536) >> 4] - temp[0] * gSineTable[((65536 + (int)cameraYaw) % 65536) >> 4];
 
-    float cameraFocus[3] = { currentPosition[0] + pan[0], currentPosition[1] + 125.0f + pan[1], currentPosition[2] + pan[2] };
-
+    float cameraFocus[3] = { currentPosition[0] + pan[0], currentPosition[1] + focusY + 125.0f + pan[1], currentPosition[2] + pan[2] };
+    
     dx = cameraFocus[0] - lakituPosition[0];
     dy = cameraFocus[1] - lakituPosition[1];
     dz = cameraFocus[2] - lakituPosition[2];
-
+    
     cameraDist = sqrtf(dx * dx + dy * dy + dz * dz);
     cameraPitch = atan2s(sqrtf(dx * dx + dz * dz), dy);
     cameraYaw = atan2s(dz, dx);
@@ -749,12 +774,9 @@ int calculate_camera_yaw(Vec3f currentPosition, Vec3f lakituPosition) {
     return atan2s(lakituPosition[2] - cameraFocus[2], lakituPosition[0] - cameraFocus[0]);
 }
 
-
-__device__ int calculate_camera_yawG(float* currentPosition, float* lakituPosition) {
-    short baseCameraYaw = -16384;
+__device__ int calculate_camera_yawG(float* currentPosition, float* lakituPosition, short baseCameraYaw, short faceAngle, float currentFloorY) {
     float baseCameraDist = 1400.0;
     short baseCameraPitch = 0x05B0;
-    short baseCameraFaceAngle = 24576;
 
     SurfaceG* floor;
     float floorY;
@@ -774,10 +796,36 @@ __device__ int calculate_camera_yawG(float* currentPosition, float* lakituPositi
         }
     }
 
+    float posMul = 1.f;
+    float posBound = 200.f;
+    //float posBound = 1200.f; //pole
+    float focMul = 0.9f;
+    float focBound = 200.f;
+
+    float posY = (currentFloorY - currentPosition[1]) * posMul;
+
+    if (posY > posBound) {
+        posY = posBound;
+    }
+
+    if (posY < -posBound) {
+        posY = -posBound;
+    }
+
+    float focusY = (currentFloorY - currentPosition[1]) * focMul;
+
+    if (focusY > focBound) {
+        focusY = focBound;
+    }
+
+    if (focusY < -focBound) {
+        focusY = -focBound;
+    }
+
     baseCameraPitch = baseCameraPitch + 2304;
 
     float cameraPos[3] = { currentPosition[0] + baseCameraDist * gCosineTableG[((65536 + (int)baseCameraPitch) % 65536) >> 4] * gSineTableG[((65536 + (int)baseCameraYaw) % 65536) >> 4],
-                       currentPosition[1] + 125.0f + baseCameraDist * gSineTableG[((65536 + (int)baseCameraPitch) % 65536) >> 4],
+                       currentPosition[1] + posY + 125.0f + baseCameraDist * gSineTableG[((65536 + (int)baseCameraPitch) % 65536) >> 4],
                        currentPosition[2] + baseCameraDist * gCosineTableG[((65536 + (int)baseCameraPitch) % 65536) >> 4] * gCosineTableG[((65536 + (int)baseCameraYaw) % 65536) >> 4]
     };
 
@@ -786,7 +834,7 @@ __device__ int calculate_camera_yawG(float* currentPosition, float* lakituPositi
 
     // Get distance and angle from camera to Mario.
     float dx = currentPosition[0] - cameraPos[0];
-    float dy = currentPosition[1] + 125.0f;
+    float dy = currentPosition[1] - cameraPos[1];
     float dz = currentPosition[2] - cameraPos[2];
 
     float cameraDist = sqrtf(dx * dx + dy * dy + dz * dz);
@@ -800,8 +848,8 @@ __device__ int calculate_camera_yawG(float* currentPosition, float* lakituPositi
     temp[1] = pan[1];
     temp[2] = pan[2];
 
-    pan[0] = temp[2] * gSineTableG[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4] + temp[0] * gCosineTableG[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4];
-    pan[2] = temp[2] * gCosineTableG[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4] + temp[0] * gSineTableG[((65536 + (int)baseCameraFaceAngle) % 65536) >> 4];
+    pan[0] = temp[2] * gSineTableG[((65536 + (int)faceAngle) % 65536) >> 4] + temp[0] * gCosineTableG[((65536 + (int)faceAngle) % 65536) >> 4];
+    pan[2] = temp[2] * gCosineTableG[((65536 + (int)faceAngle) % 65536) >> 4] - temp[0] * gSineTableG[((65536 + (int)faceAngle) % 65536) >> 4];
 
     // rotate in the opposite direction
     cameraYaw = -cameraYaw;
@@ -811,7 +859,7 @@ __device__ int calculate_camera_yawG(float* currentPosition, float* lakituPositi
     temp[2] = pan[2];
 
     pan[0] = temp[2] * gSineTableG[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gCosineTableG[((65536 + (int)cameraYaw) % 65536) >> 4];
-    pan[2] = temp[2] * gCosineTableG[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gSineTableG[((65536 + (int)cameraYaw) % 65536) >> 4];
+    pan[2] = temp[2] * gCosineTableG[((65536 + (int)cameraYaw) % 65536) >> 4] - temp[0] * gSineTableG[((65536 + (int)cameraYaw) % 65536) >> 4];
 
     // Only pan left or right
     pan[2] = 0.f;
@@ -819,13 +867,14 @@ __device__ int calculate_camera_yawG(float* currentPosition, float* lakituPositi
     cameraYaw = -cameraYaw;
 
     temp[0] = pan[0];
+    //temp[0] = -pan[0]; //pole
     temp[1] = pan[1];
     temp[2] = pan[2];
 
     pan[0] = temp[2] * gSineTableG[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gCosineTableG[((65536 + (int)cameraYaw) % 65536) >> 4];
-    pan[2] = temp[2] * gCosineTableG[((65536 + (int)cameraYaw) % 65536) >> 4] + temp[0] * gSineTableG[((65536 + (int)cameraYaw) % 65536) >> 4];
+    pan[2] = temp[2] * gCosineTableG[((65536 + (int)cameraYaw) % 65536) >> 4] - temp[0] * gSineTableG[((65536 + (int)cameraYaw) % 65536) >> 4];
 
-    float cameraFocus[3] = { currentPosition[0] + pan[0], currentPosition[1] + 125.0f + pan[1], currentPosition[2] + pan[2] };
+    float cameraFocus[3] = { currentPosition[0] + pan[0], currentPosition[1] + focusY + 125.0f + pan[1], currentPosition[2] + pan[2] };
 
     dx = cameraFocus[0] - lakituPosition[0];
     dy = cameraFocus[1] - lakituPosition[1];
@@ -878,7 +927,7 @@ __device__ int find_closest_strain_speedG(float strainVel, int cameraIdx) {
     }
 }
 
-__global__ void find_strainG(int facingAngle, float maxFVel, Polygon* ch) {
+__global__ void find_strainG(int facingAngle, float maxFVel, Polygon* ch, int baseCameraYaw) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < min(nSlidingSetups, MAX_SLIDE_SETUPS)) {
@@ -911,7 +960,7 @@ __global__ void find_strainG(int facingAngle, float maxFVel, Polygon* ch) {
             int maxStrainCameraYaw = 0;
 
             float testPos[3] = { ch->p->x - xVel, -3000.0f, ch->p->z - zVel };
-            int refCameraYaw = calculate_camera_yawG(testPos, lakituPositionG);
+            int refCameraYaw = calculate_camera_yawG(testPos, lakituPositionG, baseCameraYaw, facingAngle, -3071.0f);
             refCameraYaw = (65536 + refCameraYaw) % 65536;
 
             Point* p = ch->p;
@@ -951,7 +1000,7 @@ __global__ void find_strainG(int facingAngle, float maxFVel, Polygon* ch) {
                     testPos[0] = p->x - xVel - xOffset;
                     testPos[2] = p->z - zVel - zOffset;
 
-                    int cameraYaw = calculate_camera_yawG(testPos, lakituPositionG);
+                    int cameraYaw = calculate_camera_yawG(testPos, lakituPositionG, baseCameraYaw, facingAngle, -3071.0f);
                     cameraYaw = (short)(cameraYaw - refCameraYaw);
 
                     minStrainCameraYaw = min(minStrainCameraYaw, cameraYaw);
@@ -1955,7 +2004,7 @@ __global__ void try_forward_velG(const float minVel, const float maxVel, const f
     }
 }
 
-void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, int slideCameraYaw, float departureSpeed, float xVel0, float zVel0, const int slopeAngle, const float accel, const float steepness, struct SlideSetup* slidingSetupsGPU, struct StrainSetup* strainSetupsGPU, struct StickNode* stickLookup, const float minSpeed, const float maxSpeed, Polygon* ch, int nThreads, ofstream& wf) {
+void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, int slideCameraYaw, float departureSpeed, float xVel0, float zVel0, const int slopeAngle, const float accel, const float steepness, int baseCameraYaw, struct SlideSetup* slidingSetupsGPU, struct StrainSetup* strainSetupsGPU, struct StickNode* stickLookup, const float minSpeed, const float maxSpeed, Polygon* ch, int nThreads, ofstream& wf) {
     const float maxBullySpeed = 1000000000.0f;
     const float maxMarioSpeed = 3.0 * (73.0 / 53.0) * maxBullySpeed;
 
@@ -2220,7 +2269,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                 int nStrainSetupsCPU = 0;
 
                 cudaMemcpyToSymbol(nStrainSetups, &nStrainSetupsCPU, sizeof(int), 0, cudaMemcpyHostToDevice);
-                find_strainG<<<nBlocks, nThreads>>>(slideYaw, maxSpeed, ch);
+                find_strainG<<<nBlocks, nThreads>>>(slideYaw, maxSpeed, ch, baseCameraYaw);
                 cudaMemcpyFromSymbol(&nStrainSetupsCPU, nStrainSetups, sizeof(int), 0, cudaMemcpyDeviceToHost);
 
                 if (nStrainSetupsCPU > 0) {
@@ -2253,7 +2302,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
     }
 }
 
-void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame2Angle, int minFallAngle, int maxFallAngle, int slideCameraYaw, Vec3f lakituPosition, Polygon* ch, bool* validCameraAngle, int slopeAngle, float accel, float steepness, struct SlideSetup* slidingSetupsGPU, struct StrainSetup* strainSetupsGPU, struct StrainNode** strainLookupGPU, int* nStrainNodesGPU, struct StickNode* stickLookup, const float minSpeed, const float maxSpeed, int nThreads, ofstream& wf) {
+void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame2Angle, int minFallAngle, int maxFallAngle, int slideCameraYaw, int baseCameraYaw, Vec3f lakituPosition, Polygon* ch, bool* validCameraAngle, int slopeAngle, float accel, float steepness, struct SlideSetup* slidingSetupsGPU, struct StrainSetup* strainSetupsGPU, struct StrainNode** strainLookupGPU, int* nStrainNodesGPU, struct StickNode* stickLookup, const float minSpeed, const float maxSpeed, int nThreads, ofstream& wf) {
     int finalSlideYaw = atan2s(zVel0, xVel0);
     int newFacingDYaw = (short)(frame2Angle - finalSlideYaw);
 
@@ -2307,19 +2356,21 @@ void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame
         int minStrainCameraYaw = 0;
         int maxStrainCameraYaw = 0;
 
-        int refCameraYaw = calculate_camera_yaw({ ch->p->x, -3000.0f, ch->p->z }, lakituPosition);
+        int refCameraYaw = calculate_camera_yaw({ ch->p->x, -3000.0f, ch->p->z }, lakituPosition, baseCameraYaw, 0, -3071.0f);
         refCameraYaw = (65536 + refCameraYaw) % 65536;
 
         Point* p = ch->p;
         int nSamples = 8;
 
-        for (int i = 1; i < ch->nPoints; i++) {
+        for (int i = 0; i < ch->nPoints; i++) {
             for (int j = 0; j < nSamples; j++) {
-                int cameraYaw = calculate_camera_yaw({ p->x + 2.0f * maxSpeed * sinf((2.0 * M_PI * j) / nSamples), -3000.0f, p->z + 2.0f * maxSpeed * cosf((2.0 * M_PI * j) / nSamples) }, lakituPosition);
-                cameraYaw = (short)(cameraYaw - refCameraYaw);
-                minStrainCameraYaw = min(minStrainCameraYaw, cameraYaw);
-                maxStrainCameraYaw = max(maxStrainCameraYaw, cameraYaw);
-                p = p->next;
+                for (int k = 0; k < 65536; k += 8192) {
+                    int cameraYaw = calculate_camera_yaw({ p->x + 2.0f * maxSpeed * sinf((2.0 * M_PI * j) / nSamples), -3000.0f, p->z + 2.0f * maxSpeed * cosf((2.0 * M_PI * j) / nSamples) }, lakituPosition, baseCameraYaw, k, -3071.0f);
+                    cameraYaw = (short)(cameraYaw - refCameraYaw);
+                    minStrainCameraYaw = min(minStrainCameraYaw, cameraYaw);
+                    maxStrainCameraYaw = max(maxStrainCameraYaw, cameraYaw);
+                    p = p->next;
+                }
             }
         }
 
@@ -2365,7 +2416,7 @@ void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame
 
                 for (struct StickNode* node = &(stickLookup[targetYaw >> 4]); node->next; node = node->next) {
                     int intendedDYaw = (65536 + node->data.intendedYaw - slideYaw) % 65536;
-                    try_intended_yaw(node->data.x, node->data.y, node->data.mag, intendedDYaw, slideYaw, slideCameraYaw, departureSpeed, xVel0, zVel0, slopeAngle, accel, steepness, slidingSetupsGPU, strainSetupsGPU, stickLookup, minSpeed, maxSpeed, chG, nThreads, wf);
+                    try_intended_yaw(node->data.x, node->data.y, node->data.mag, intendedDYaw, slideYaw, slideCameraYaw, departureSpeed, xVel0, zVel0, slopeAngle, accel, steepness, baseCameraYaw, slidingSetupsGPU, strainSetupsGPU, stickLookup, minSpeed, maxSpeed, chG, nThreads, wf);
                 }
 
                 cudaMemcpyFromSymbol(&strainCount, nStrainSetups, sizeof(int), 0, cudaMemcpyDeviceToHost);
@@ -3012,6 +3063,8 @@ int main()
     
     int frame2Angle = 1992;
 
+    int baseCameraYaw = -8192;
+
     int minFallAngle = 0;
     int maxFallAngle = 65535;
 
@@ -3190,17 +3243,19 @@ int main()
                         int minCameraYaw = 0;
                         int maxCameraYaw = 0;
 
-                        int refCameraYaw = calculate_camera_yaw({ ch.p->x, -3000.0f, ch.p->z }, lakituPosition);
+                        int refCameraYaw = calculate_camera_yaw({ ch.p->x, -3000.0f, ch.p->z }, lakituPosition, baseCameraYaw, 0, -3071.0f);
                         refCameraYaw = (65536 + refCameraYaw) % 65536;
 
                         Point* p = ch.p->next;
 
                         for (int l = 1; l < ch.nPoints; l++) {
-                            int cameraYaw = calculate_camera_yaw({ p->x, -3000.0f, p->z }, lakituPosition);
-                            cameraYaw = (short)(cameraYaw - refCameraYaw);
-                            minCameraYaw = min(minCameraYaw, cameraYaw);
-                            maxCameraYaw = max(maxCameraYaw, cameraYaw);
-                            p = p->next;
+                            for (int m = 0; m < 65536; m = m + 8192) {
+                                int cameraYaw = calculate_camera_yaw({ p->x, -3000.0f, p->z }, lakituPosition, baseCameraYaw, 0, -3071.0f);
+                                cameraYaw = (short)(cameraYaw - refCameraYaw);
+                                minCameraYaw = min(minCameraYaw, cameraYaw);
+                                maxCameraYaw = max(maxCameraYaw, cameraYaw);
+                                p = p->next;
+                            }
                         }
 
                         int minCameraIdx = gReverseArctanTable[(65536 + minCameraYaw + refCameraYaw) % 65536];
@@ -3217,7 +3272,7 @@ int main()
                             if (validCameraAngle[slideCameraYaw]) {
                                 generate_stick_lookup(stickLookup, slideCameraYaw);
 
-                                find_slide_setups(vels[2 * j], vels[2 * j + 1], departureSpeed, frame2Angle, minFallAngle, maxFallAngle, slideCameraYaw, lakituPosition, &ch, validCameraAngle, slopeAngle, accel, steepness, slidingSetupsGPU, strainSetupsGPU, strainLookupGPU, nStrainNodesGPU, stickLookup, minStartSpeed, maxStartSpeed, nThreads, wf);
+                                find_slide_setups(vels[2 * j], vels[2 * j + 1], departureSpeed, frame2Angle, minFallAngle, maxFallAngle, slideCameraYaw, baseCameraYaw, lakituPosition, &ch, validCameraAngle, slopeAngle, accel, steepness, slidingSetupsGPU, strainSetupsGPU, strainLookupGPU, nStrainNodesGPU, stickLookup, minStartSpeed, maxStartSpeed, nThreads, wf);
 
                                 free_stick_lookup(stickLookup);
                             }
