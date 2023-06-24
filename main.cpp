@@ -3250,7 +3250,7 @@ int main()
 
                         for (int l = 1; l < ch.nPoints; l++) {
                             for (int m = 0; m < 65536; m = m + 8192) {
-                                int cameraYaw = calculate_camera_yaw({ p->x, -3000.0f, p->z }, lakituPosition, baseCameraYaw, 0, -3071.0f);
+                                int cameraYaw = calculate_camera_yaw({ p->x, -3000.0f, p->z }, lakituPosition, baseCameraYaw, m, -3071.0f);
                                 cameraYaw = (short)(cameraYaw - refCameraYaw);
                                 minCameraYaw = min(minCameraYaw, cameraYaw);
                                 maxCameraYaw = max(maxCameraYaw, cameraYaw);
