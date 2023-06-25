@@ -965,7 +965,7 @@ __global__ void find_strainG(int facingAngle, float maxFVel, Polygon* ch, int ba
 
             Point* p = ch->p;
 
-            for (int i = 1; i < ch->nPoints; i++) {
+            for (int i = 0; i < ch->nPoints; i++) {
                 for (int j = 0; j < 4; j++) {
                     float originalSpeed;
                     float strainingSpeed;
@@ -2369,9 +2369,10 @@ void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame
                     cameraYaw = (short)(cameraYaw - refCameraYaw);
                     minStrainCameraYaw = min(minStrainCameraYaw, cameraYaw);
                     maxStrainCameraYaw = max(maxStrainCameraYaw, cameraYaw);
-                    p = p->next;
                 }
             }
+
+            p = p->next;
         }
 
         int minCameraIdx = gReverseArctanTable[(65536 + minStrainCameraYaw + refCameraYaw) % 65536];
@@ -3060,7 +3061,7 @@ int main()
     Vec3f platformNormal = { 0.18825f, 0.822f, -0.36075f };
     Vec3f frame1Position = { 522477.09375f, -2999.83252f, 2358376.5f };
     float departureSpeed = 2674596.5f;
-    
+
     int frame2Angle = 1992;
 
     int baseCameraYaw = -8192;
@@ -3236,7 +3237,7 @@ int main()
 
                     if (nZones > 0) {
                         write_zone_data(vels[2 * j], vels[2 * j + 1], sqSetups, nZones, first, zn);
-
+                        
                         struct Polygon ch;
                         get_mzone_convex_hull(sqSetups, nZones, &ch);
 
@@ -3246,16 +3247,17 @@ int main()
                         int refCameraYaw = calculate_camera_yaw({ ch.p->x, -3000.0f, ch.p->z }, lakituPosition, baseCameraYaw, 0, -3071.0f);
                         refCameraYaw = (65536 + refCameraYaw) % 65536;
 
-                        Point* p = ch.p->next;
+                        Point* p = ch.p;
 
-                        for (int l = 1; l < ch.nPoints; l++) {
+                        for (int l = 0; l < ch.nPoints; l++) {
                             for (int m = 0; m < 65536; m = m + 8192) {
                                 int cameraYaw = calculate_camera_yaw({ p->x, -3000.0f, p->z }, lakituPosition, baseCameraYaw, m, -3071.0f);
                                 cameraYaw = (short)(cameraYaw - refCameraYaw);
                                 minCameraYaw = min(minCameraYaw, cameraYaw);
                                 maxCameraYaw = max(maxCameraYaw, cameraYaw);
-                                p = p->next;
                             }
+
+                            p = p->next;
                         }
 
                         int minCameraIdx = gReverseArctanTable[(65536 + minCameraYaw + refCameraYaw) % 65536];
@@ -3279,6 +3281,7 @@ int main()
                         }
 
                         free_polygon(&ch);
+                        
                     }
 
                     for (int k = 0; k < nZones; k++) {
