@@ -3146,14 +3146,16 @@ int main()
 
             find_squish_spots(&platform0, &platform1, i, squishSpots, nSquishSpots);
             
-            float ceilingEdge[2][2];
+            float ceilingEdge[2][2][2];
 
             int idx = 0;
 
             for (int j = 0; j < 3; j++) {
                 if (platform1.ceilings[i].vectors[j][0] != platformPos[0] || platform1.ceilings[i].vectors[j][2] != platformPos[2]) {
-                    ceilingEdge[idx][0] = platform1.ceilings[i].vectors[j][0];
-                    ceilingEdge[idx][1] = platform1.ceilings[i].vectors[j][2];
+                    ceilingEdge[0][idx][0] = platform1.ceilings[i].vectors[j][0];
+                    ceilingEdge[0][idx][1] = platform1.ceilings[i].vectors[j][2];
+                    ceilingEdge[1][idx][0] = platform2.ceilings[i].vectors[j][0];
+                    ceilingEdge[1][idx][1] = platform2.ceilings[i].vectors[j][2];
                     idx++;
                 }
             }
@@ -3170,25 +3172,42 @@ int main()
             float xOffset = floorNormalY1 * (xPushVel / 4.0f);
             float zOffset = floorNormalY1 * (zPushVel / 4.0f);
 
-            double ax = ceilingEdge[0][0] + ((double)xOffset / 2.0);
-            double az = ceilingEdge[0][1] + ((double)zOffset / 2.0);
-            double bx = ceilingEdge[1][0] + ((double)xOffset / 2.0);
-            double bz = ceilingEdge[1][1] + ((double)zOffset / 2.0);
+            double ax1 = ceilingEdge[0][0][0] + ((double)xOffset / 2.0);
+            double az1 = ceilingEdge[0][0][1] + ((double)zOffset / 2.0);
+            double bx1 = ceilingEdge[0][1][0] + ((double)xOffset / 2.0);
+            double bz1 = ceilingEdge[0][1][1] + ((double)zOffset / 2.0);
 
-            double eqA = (bx - ax) * (bx - ax) + (bz - az) * (bz - az);
-            double eqB = 2.0 * ((ax - frame1Position[0]) * (bx - ax) + (az - frame1Position[2]) * (bz - az));
-            double eqC = (ax - frame1Position[0]) * (ax - frame1Position[0]) + (az - frame1Position[2]) * (az - frame1Position[2]) - (double)(departureSpeed * platform2.triangles[floorIdx].normal[1])*(double)(departureSpeed * platform2.triangles[floorIdx].normal[1]);
-            double eqDet = eqB * eqB - 4.0 * eqA * eqC;
+            double eqA1 = (bx1 - ax1) * (bx1 - ax1) + (bz1 - az1) * (bz1 - az1);
+            double eqB1 = 2.0 * ((ax1 - frame1Position[0]) * (bx1 - ax1) + (az1 - frame1Position[2]) * (bz1 - az1));
+            double eqC1 = (ax1 - frame1Position[0]) * (ax1 - frame1Position[0]) + (az1 - frame1Position[2]) * (az1 - frame1Position[2]) - (double)(departureSpeed * platform2.triangles[floorIdx].normal[1])*(double)(departureSpeed * platform2.triangles[floorIdx].normal[1]);
+            double eqDet1 = eqB1 * eqB1 - 4.0 * eqA1 * eqC1;
 
-            if (eqDet >= 0) {
+            double ax2 = ceilingEdge[1][0][0] + ((double)xOffset / 2.0);
+            double az2 = ceilingEdge[1][0][1] + ((double)zOffset / 2.0);
+            double bx2 = ceilingEdge[1][1][0] + ((double)xOffset / 2.0);
+            double bz2 = ceilingEdge[1][1][1] + ((double)zOffset / 2.0);
+
+            double eqA2 = (bx2 - ax2) * (bx2 - ax2) + (bz2 - az2) * (bz2 - az2);
+            double eqB2 = 2.0 * ((ax2 - frame1Position[0]) * (bx2 - ax2) + (az2 - frame1Position[2]) * (bz2 - az2));
+            double eqC2 = (ax2 - frame1Position[0]) * (ax2 - frame1Position[0]) + (az2 - frame1Position[2]) * (az2 - frame1Position[2]) - (double)(departureSpeed * platform2.triangles[floorIdx].normal[1]) * (double)(departureSpeed * platform2.triangles[floorIdx].normal[1]);
+            double eqDet2 = eqB2 * eqB2 - 4.0 * eqA2 * eqC2;
+
+            if (eqDet1 >= 0 && eqDet2 >= 0) {
                 velCount = 0;
 
                 for (int j = 0; j < 2; j++) {
-                    double t = (-eqB + (j == 0 ? 1.0 : -1.0) * sqrt(eqDet)) / (2.0 * eqA);
+                    double t1 = (-eqB1 + (j == 0 ? 1.0 : -1.0) * sqrt(eqDet1)) / (2.0 * eqA1);
+                    double t2 = (-eqB2 + (j == 0 ? 1.0 : -1.0) * sqrt(eqDet2)) / (2.0 * eqA2);
 
-                    if (t >= 0.0 && t <= 1.0) {
-                        double xPos = (bx - ax) * t + ax;
-                        double zPos = (bz - az) * t + az;
+                    if (t1 >= 0.0 && t1 <= 1.0 && t2 >= 0.0 && t2 <= 1.0) {
+                        double xPos1 = (bx1 - ax1) * t1 + ax1;
+                        double zPos1 = (bz1 - az1) * t1 + az1;
+
+                        double xPos2 = (bx2 - ax2) * t2 + ax2;
+                        double zPos2 = (bz2 - az2) * t2 + az2;
+
+                        double xPos = (xPos1 + xPos2) / 2.0;
+                        double zPos = (zPos1 + zPos2) / 2.0;
 
                         double xDiff = frame1Position[0] - xPos;
                         double zDiff = frame1Position[2] - zPos;
