@@ -2689,6 +2689,8 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
                                 sqSetup[nZones].pushAngle = angle;
                                 sqSetup[nZones].squishQSteps = i + 1;
 
+                                nZones++;
+
                                 /*
                                 printf("Setup #%d:\n    Bully Push Zone: ", nZones);
                                 print_polygon(bpzCopy);
@@ -2702,8 +2704,6 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
                             else if (nZones == MAX_ZONES) {
                                 fprintf(stderr, "Warning: Number of bully collision zones has been exceeded. No more will be recorded. Increase the internal maximum to prevent this from happening.");
                             }
-
-                            nZones++;
                         }
                         else {
                             std::free(marioZone);
