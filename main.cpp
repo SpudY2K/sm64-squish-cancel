@@ -2396,6 +2396,7 @@ void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame
 
         for (int s = minFallAngle; s <= maxFallAngle; s += 16) {
             int slideYaw = s % 65536;
+            slideYaw = (slideYaw + 65536) % 65536;
 
             for (int i = minCameraIdx; i <= maxCameraIdx; i++) {
                 int strainCameraYaw = gArctanTable[i % 8192];
@@ -2439,7 +2440,7 @@ void find_slide_setups(float xVel0, float zVel0, float departureSpeed, int frame
     }
 }
 
-void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVel, Platform* plat, int floorIdx, float* squishSpots, int nSquishSpots, SquishCancelSetup* sqSetup, int& nZones) {
+void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVel, Platform* plat, int floorIdx, float maxXPrecision, float maxZPrecision, float* squishSpots, int nSquishSpots, SquishCancelSetup* sqSetup, int& nZones) {
     const float pushRadius = 115.0f;
     const float bullyHurtbox = 63.0f;
 
@@ -2501,8 +2502,8 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
                                     refAngle = angle;
                                 }
 
-                                minAngle = min(minAngle, angle - refAngle);
-                                maxAngle = max(maxAngle, angle - refAngle);
+                                minAngle = min(minAngle, (int)(short)(angle - refAngle));
+                                maxAngle = max(maxAngle, (int)(short)(angle - refAngle));
                             }
                         }
                     }
@@ -2530,183 +2531,197 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
 
                     p = bullyZone.p;
 
-                    for (int k = 0; k < bullyPushZone.nPoints; k++) {
-                        p->x = p->x - pushRadius * gSineTable[angle >> 4];
-                        p->z = p->z - pushRadius * gCosineTable[angle >> 4];
-                        p = p->next;
-                    }
-
-                    nAnglePoints = 0;
                     float minX = INFINITY;
                     float maxX = -INFINITY;
                     float minZ = INFINITY;
                     float maxZ = -INFINITY;
 
-                    for (int k = 0; k < nSquishSpots; k++) {
-                        float signX = (squishSpots[2 * k] > 0) - (squishSpots[2 * k] < 0);
-                        float signZ = (squishSpots[(2 * k) + 1] > 0) - (squishSpots[(2 * k) + 1] < 0);
+                    for (int k = 0; k < bullyPushZone.nPoints; k++) {
+                        p->x = p->x - pushRadius * gSineTable[angle >> 4];
+                        p->z = p->z - pushRadius * gCosineTable[angle >> 4];
 
-                        int minAngleSpot = INT_MAX;
-                        int maxAngleSpot = INT_MIN;
-                        int refAngleSpot = 65536;
+                        minX = std::min(minX, p->x);
+                        maxX = std::max(maxX, p->x);
+                        minZ = std::min(minZ, p->z);
+                        maxZ = std::max(maxZ, p->z);
 
-                        float minDistSpot = INFINITY;
-                        float maxDistSpot = -INFINITY;
+                        p = p->next;
+                    }
 
-                        for (int l = 0; l < 4; l++) {
-                            p = bullyZone.p;
+                    if (floorf(maxX / maxXPrecision) >= ceilf(minX / maxXPrecision) && floorf(maxZ / maxZPrecision) >= ceilf(minZ / maxZPrecision)) {
+                        nAnglePoints = 0;
 
-                            for (int m = 0; m < bullyZone.nPoints; m++) {
-                                float xDist = (squishSpots[2 * k] + signX * (l % 2)) - p->x;
-                                float zDist = (squishSpots[(2 * k) + 1] + signZ * (l / 2)) - p->z;
+                        minX = INFINITY;
+                        maxX = -INFINITY;
+                        minZ = INFINITY;
+                        maxZ = -INFINITY;
 
-                                float dist = sqrtf(xDist * xDist + zDist * zDist);
+                        for (int k = 0; k < nSquishSpots; k++) {
+                            float signX = (squishSpots[2 * k] > 0) - (squishSpots[2 * k] < 0);
+                            float signZ = (squishSpots[(2 * k) + 1] > 0) - (squishSpots[(2 * k) + 1] < 0);
 
-                                int testAngle = atan2s(zDist, xDist);
-                                testAngle = (65536 + testAngle) % 65536;
+                            int minAngleSpot = INT_MAX;
+                            int maxAngleSpot = INT_MIN;
+                            int refAngleSpot = 65536;
 
-                                int angleDiff = (short)(testAngle - uphillAngle);
+                            float minDistSpot = INFINITY;
+                            float maxDistSpot = -INFINITY;
 
-                                if (angleDiff < -0x4000 || angleDiff > 0x4000) {
-                                    if (refAngleSpot == 65536) {
-                                        refAngleSpot = testAngle;
+                            for (int l = 0; l < 4; l++) {
+                                p = bullyZone.p;
+
+                                for (int m = 0; m < bullyZone.nPoints; m++) {
+                                    float xDist = (squishSpots[2 * k] + signX * (l % 2)) - p->x;
+                                    float zDist = (squishSpots[(2 * k) + 1] + signZ * (l / 2)) - p->z;
+
+                                    float dist = sqrtf(xDist * xDist + zDist * zDist);
+
+                                    int testAngle = atan2s(zDist, xDist);
+                                    testAngle = (65536 + testAngle) % 65536;
+
+                                    int angleDiff = (short)(testAngle - uphillAngle);
+
+                                    if (angleDiff < -0x4000 || angleDiff > 0x4000) {
+                                        if (refAngleSpot == 65536) {
+                                            refAngleSpot = testAngle;
+                                        }
+
+                                        testAngle = (short)(testAngle - refAngleSpot);
+                                        testAngle = ((testAngle + 98304) % 65536) - 32768;
+
+                                        minDistSpot = fminf(dist, minDistSpot);
+                                        maxDistSpot = fmaxf(dist, maxDistSpot);
+                                        minAngleSpot = fminf(testAngle, minAngleSpot);
+                                        maxAngleSpot = fmaxf(testAngle, maxAngleSpot);
                                     }
 
-                                    testAngle = testAngle - refAngleSpot;
-                                    testAngle = ((testAngle + 98304) % 65536) - 32768;
+                                    p = p->next;
+                                }
+                            }
 
-                                    minDistSpot = fminf(dist, minDistSpot);
-                                    maxDistSpot = fmaxf(dist, maxDistSpot);
-                                    minAngleSpot = fminf(testAngle, minAngleSpot);
-                                    maxAngleSpot = fmaxf(testAngle, maxAngleSpot);
+                            if (refAngleSpot != 65536) {
+                                int angleDiff = (short)(angle - refAngleSpot);
+
+                                if (minDistSpot >= 2.0f && maxDistSpot <= bullyHurtbox && minAngleSpot <= angleDiff && maxAngleSpot >= angleDiff) {
+                                    anglePointIdxs[nAnglePoints] = k;
+                                    nAnglePoints++;
+
+                                    minX = fminf(minX, squishSpots[2 * k] - 0.999f * (squishSpots[2 * k] <= 0));
+                                    maxX = fmaxf(maxX, squishSpots[2 * k] + 0.999f * (squishSpots[2 * k] >= 0));
+                                    minZ = fminf(minZ, squishSpots[(2 * k) + 1] - 0.999f * (squishSpots[(2 * k) + 1] <= 0));
+                                    maxZ = fmaxf(maxZ, squishSpots[(2 * k) + 1] + 0.999f * (squishSpots[(2 * k) + 1] >= 0));
+                                }
+                            }
+                        }
+
+                        if (nAnglePoints > 0) {
+                            int minXI = (int)minX;
+                            int maxXI = (int)maxX;
+                            int minZI = (int)minZ;
+                            int maxZI = (int)maxZ;
+
+                            bool* grid = (bool*)std::calloc((maxXI - minXI + 1) * (maxZI - minZI + 1), sizeof(bool));
+
+                            for (int k = 0; k < nAnglePoints; k++) {
+                                int gridIdx = ((int)squishSpots[(2 * anglePointIdxs[k]) + 1] - minZI) * (maxXI - minXI + 1) + ((int)squishSpots[2 * anglePointIdxs[k]] - minXI);
+                                grid[gridIdx] = true;
+                            }
+
+                            struct Polygon* marioZone = (struct Polygon*)std::malloc(sizeof(struct Polygon));
+                            create_polygon(grid, minX, maxX, minZ, maxZ, marioZone);
+
+                            std::free(grid);
+
+                            int lowerAngle = (gArctanTable[(j + 8191) % 8192] + 65536) % 65536;
+                            int upperAngle = (gArctanTable[(j + 1) % 8192] + 65536) % 65536;
+
+                            float lowerMidAngle;
+                            float upperMidAngle;
+
+                            if (lowerAngle > angle) {
+                                lowerMidAngle = fmodf((float)(lowerAngle + angle + 65536) / 2.0f, 65536.0f);
+                            }
+                            else {
+                                lowerMidAngle = (float)(lowerAngle + angle) / 2.0f;
+                            }
+
+                            if (upperAngle < angle) {
+                                upperMidAngle = fmodf((float)(upperAngle + angle + 65536) / 2.0f, 65536.0f);
+                            }
+                            else {
+                                upperMidAngle = (float)(upperAngle + angle) / 2.0f;
+                            }
+
+                            float lowerX;
+                            float lowerZ;
+                            float upperX;
+                            float upperZ;
+
+                            double minB = INFINITY;
+                            double maxB = -INFINITY;
+
+                            double sinLowerMidAngle = sin(2.0 * M_PI * lowerMidAngle / 65536.0);
+                            double cosLowerMidAngle = cos(2.0 * M_PI * lowerMidAngle / 65536.0);
+                            double sinUpperMidAngle = sin(2.0 * M_PI * upperMidAngle / 65536.0);
+                            double cosUpperMidAngle = cos(2.0 * M_PI * upperMidAngle / 65536.0);
+
+                            p = bullyZone.p;
+
+                            for (int k = 0; k < bullyZone.nPoints; k++) {
+                                double lowerB = p->x * cosLowerMidAngle - p->z * sinLowerMidAngle;
+                                double upperB = p->x * cosUpperMidAngle - p->z * sinUpperMidAngle;
+
+                                if (lowerB < minB) {
+                                    minB = lowerB;
+                                    lowerX = p->x;
+                                    lowerZ = p->z;
+                                }
+
+                                if (upperB > maxB) {
+                                    maxB = upperB;
+                                    upperX = p->x;
+                                    upperZ = p->z;
                                 }
 
                                 p = p->next;
                             }
-                        }
 
-                        if (refAngleSpot != 65536) {
-                            int angleDiff = (short)(angle - refAngleSpot);
+                            cut_polygon_on_line(marioZone, sinLowerMidAngle, cosLowerMidAngle, lowerX, lowerZ, -1);
+                            cut_polygon_on_line(marioZone, sinUpperMidAngle, cosUpperMidAngle, upperX, upperZ, 1);
 
-                            if (minDistSpot >= 2.0f && maxDistSpot <= bullyHurtbox && minAngleSpot <= angleDiff && maxAngleSpot >= angleDiff) {
-                                anglePointIdxs[nAnglePoints] = k;
-                                nAnglePoints++;
+                            if (marioZone->nPoints > 0) {
+                                if (nZones < MAX_ZONES) {
+                                    struct Polygon* bpzCopy = (struct Polygon*)std::malloc(sizeof(struct Polygon));
+                                    copy_polygon(&bullyPushZone, bpzCopy);
 
-                                minX = fminf(minX, squishSpots[2 * k] - 0.999f * (squishSpots[2 * k] <= 0));
-                                maxX = fmaxf(maxX, squishSpots[2 * k] + 0.999f * (squishSpots[2 * k] >= 0));
-                                minZ = fminf(minZ, squishSpots[(2 * k) + 1] - 0.999f * (squishSpots[(2 * k) + 1] <= 0));
-                                maxZ = fmaxf(maxZ, squishSpots[(2 * k) + 1] + 0.999f * (squishSpots[(2 * k) + 1] >= 0));
-                            }
-                        }
-                    }
+                                    struct Polygon* bzCopy = (struct Polygon*)std::malloc(sizeof(struct Polygon));
+                                    copy_polygon(&bullyZone, bzCopy);
 
-                    if (nAnglePoints > 0) {
-                        int minXI = (int)minX;
-                        int maxXI = (int)maxX;
-                        int minZI = (int)minZ;
-                        int maxZI = (int)maxZ;
+                                    sqSetup[nZones].bullyPushZone = bpzCopy;
+                                    sqSetup[nZones].bullyZone = bzCopy;
+                                    sqSetup[nZones].marioZone = marioZone;
+                                    sqSetup[nZones].pushAngle = angle;
+                                    sqSetup[nZones].squishQSteps = i + 1;
 
-                        bool* grid = (bool*)std::calloc((maxXI - minXI + 1) * (maxZI - minZI + 1), sizeof(bool));
-
-                        for (int k = 0; k < nAnglePoints; k++) {
-                            int gridIdx = ((int)squishSpots[(2 * anglePointIdxs[k]) + 1] - minZI) * (maxXI - minXI + 1) + ((int)squishSpots[2 * anglePointIdxs[k]] - minXI);
-                            grid[gridIdx] = true;
-                        }
-
-                        struct Polygon* marioZone = (struct Polygon*)std::malloc(sizeof(struct Polygon));
-                        create_polygon(grid, minX, maxX, minZ, maxZ, marioZone);
-
-                        std::free(grid);
-
-                        int lowerAngle = (gArctanTable[(j + 8191) % 8192] + 65536) % 65536;
-                        int upperAngle = (gArctanTable[(j + 1) % 8192] + 65536) % 65536;
-
-                        float lowerMidAngle;
-                        float upperMidAngle;
-
-                        if (lowerAngle > angle) {
-                            lowerMidAngle = fmodf((float)(lowerAngle + angle + 65536) / 2.0f, 65536.0f);
-                        }
-                        else {
-                            lowerMidAngle = (float)(lowerAngle + angle) / 2.0f;
-                        }
-
-                        if (upperAngle < angle) {
-                            upperMidAngle = fmodf((float)(upperAngle + angle + 65536) / 2.0f, 65536.0f);
-                        }
-                        else {
-                            upperMidAngle = (float)(upperAngle + angle) / 2.0f;
-                        }
-
-                        float lowerX;
-                        float lowerZ;
-                        float upperX;
-                        float upperZ;
-
-                        double minB = INFINITY;
-                        double maxB = -INFINITY;
-
-                        double sinLowerMidAngle = sin(2.0 * M_PI * lowerMidAngle / 65536.0);
-                        double cosLowerMidAngle = cos(2.0 * M_PI * lowerMidAngle / 65536.0);
-                        double sinUpperMidAngle = sin(2.0 * M_PI * upperMidAngle / 65536.0);
-                        double cosUpperMidAngle = cos(2.0 * M_PI * upperMidAngle / 65536.0);
-
-                        p = bullyZone.p;
-
-                        for (int k = 0; k < bullyZone.nPoints; k++) {
-                            double lowerB = p->x * cosLowerMidAngle - p->z * sinLowerMidAngle;
-                            double upperB = p->x * cosUpperMidAngle - p->z * sinUpperMidAngle;
-
-                            if (lowerB < minB) {
-                                minB = lowerB;
-                                lowerX = p->x;
-                                lowerZ = p->z;
-                            }
-
-                            if (upperB > maxB) {
-                                maxB = upperB;
-                                upperX = p->x;
-                                upperZ = p->z;
-                            }
-
-                            p = p->next;
-                        }
-
-                        cut_polygon_on_line(marioZone, sinLowerMidAngle, cosLowerMidAngle, lowerX, lowerZ, -1);
-                        cut_polygon_on_line(marioZone, sinUpperMidAngle, cosUpperMidAngle, upperX, upperZ, 1);
-
-                        if (marioZone->nPoints > 0) {
-                            if (nZones < MAX_ZONES) {
-                                struct Polygon* bpzCopy = (struct Polygon*)std::malloc(sizeof(struct Polygon));
-                                copy_polygon(&bullyPushZone, bpzCopy);
-
-                                struct Polygon* bzCopy = (struct Polygon*)std::malloc(sizeof(struct Polygon));
-                                copy_polygon(&bullyZone, bzCopy);
-
-                                sqSetup[nZones].bullyPushZone = bpzCopy;
-                                sqSetup[nZones].bullyZone = bzCopy;
-                                sqSetup[nZones].marioZone = marioZone;
-                                sqSetup[nZones].pushAngle = angle;
-                                sqSetup[nZones].squishQSteps = i + 1;
+                                    /*
+                                    printf("Setup #%d:\n    Bully Push Zone: ", nZones);
+                                    print_polygon(bpzCopy);
+                                    printf("    Bully Zone: ");
+                                    print_polygon(bzCopy);
+                                    printf("    Mario Zone: ");
+                                    print_polygon(marioZone);
+                                    printf("\n");
+                                    */
+                                }
+                                else if (nZones == MAX_ZONES) {
+                                    fprintf(stderr, "Warning: Number of bully collision zones has been exceeded. No more will be recorded. Increase the internal maximum to prevent this from happening.\n");
+                                }
 
                                 nZones++;
-
-                                /*
-                                printf("Setup #%d:\n    Bully Push Zone: ", nZones);
-                                print_polygon(bpzCopy);
-                                printf("    Bully Zone: ");
-                                print_polygon(bzCopy);
-                                printf("    Mario Zone: ");
-                                print_polygon(marioZone);
-                                printf("\n");
-                                */
                             }
-                            else if (nZones == MAX_ZONES) {
-                                fprintf(stderr, "Warning: Number of bully collision zones has been exceeded. No more will be recorded. Increase the internal maximum to prevent this from happening.");
+                            else {
+                                std::free(marioZone);
                             }
-                        }
-                        else {
-                            std::free(marioZone);
                         }
                     }
 
@@ -3069,6 +3084,9 @@ int main()
     int minFallAngle = 0;
     int maxFallAngle = 65535;
 
+    float maxXPrecision = 0.0f;
+    float maxZPrecision = 0.0f;
+
     const float accel = 7.0f;
     const float minStartSpeed = 0.0f;
     const float maxStartSpeed = 20.0f;
@@ -3252,7 +3270,7 @@ int main()
 
                 for (int j = 0; j < velCount; j++) {
                     int nZones = 0;
-                    find_collision_zones(&(startPolygons[j]), xPushVel, zPushVel, &platform1, floorIdx, squishSpots, nSquishSpots, sqSetups, nZones);
+                    find_collision_zones(&(startPolygons[j]), xPushVel, zPushVel, &platform1, floorIdx, maxXPrecision, maxZPrecision, squishSpots, nSquishSpots, sqSetups, nZones);
 
                     if (nZones > 0) {
                         write_zone_data(vels[2 * j], vels[2 * j + 1], sqSetups, nZones, first, zn);
