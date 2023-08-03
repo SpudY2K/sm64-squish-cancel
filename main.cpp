@@ -2513,8 +2513,8 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
             }
 
             if (refAngle != 65536) {
-                minAngle = (65536 + minAngle + refAngle);
-                maxAngle = (65536 + maxAngle + refAngle);
+                minAngle = (65536 + minAngle + refAngle) % 65536;
+                maxAngle = (65536 + maxAngle + refAngle) % 65536;
 
                 int minAngleIdx = gReverseArctanTable[minAngle];
                 int maxAngleIdx = gReverseArctanTable[maxAngle];
