@@ -1254,7 +1254,7 @@ float find_boundary(float minValue, float maxValue, float target, float yNormal,
         float pos = midValue;
 
         for (int i = 0; i < 4; i++) {
-            pos = pos + yNormal * (vel / 4.0);
+            pos = pos + yNormal * (vel / 4.0f);
         }
 
         if (pos < target) {
