@@ -1073,8 +1073,14 @@ __global__ void find_collisions(int slideYaw, struct MiniSquishCancelSetup* sqSe
 
         const float bullyPushDist = 115.0f;
 
-        float xDist = bullyPushDist * sinsG(sqSetup->pushAngle);
-        float zDist = bullyPushDist * cossG(sqSetup->pushAngle);
+        float testBullyX = fabs(sqSetup->minBullyX) > fabs(sqSetup->maxBullyX) ? sqSetup->minBullyX : sqSetup->maxBullyX;
+        float testBullyZ = fabs(sqSetup->minBullyZ) > fabs(sqSetup->maxBullyZ) ? sqSetup->minBullyZ : sqSetup->maxBullyZ;
+
+        float testMarioX = testBullyX + bullyPushDist * sinsG(sqSetup->pushAngle);
+        float testMarioZ = testBullyZ + bullyPushDist * cossG(sqSetup->pushAngle);
+
+        float xDist = testBullyX - testMarioX;
+        float zDist = testBullyZ - testMarioZ;
 
         float a = (xDist * xDist + zDist * zDist);
 
@@ -1106,8 +1112,6 @@ __global__ void find_collisions(int slideYaw, struct MiniSquishCancelSetup* sqSe
                     
                     if (cosMaxAngleDiff < 1.0f) {
                         float maxAngleDiff = 32768.0f * acos(cosMaxAngleDiff) / M_PI;
-
-
 
                         for (int bullyAngleDiff = 0; bullyAngleDiff < maxAngleDiff; bullyAngleDiff += 16) {
                             for (int j = 0; j < 4; j++) {
@@ -1146,7 +1150,7 @@ __global__ void find_collisions(int slideYaw, struct MiniSquishCancelSetup* sqSe
                                     testCollisionSpeed = simulate_bully_collision(marioVelX, marioVelZ, slideYaw, testSpeed, bullyAngle, xDist, zDist);
 
                                     if (testCollisionSpeed == slideSetup->forwardVel) {
-                                        check_bully_speed(estimatedSpeed, bullyAngle, sqSetup->minBullyX, sqSetup->maxBullyX, sqSetup->minBullyZ, sqSetup->maxBullyZ, sqIdx, strainIdx, minStableFrames);
+                                        check_bully_speed(testCollisionSpeed, bullyAngle, sqSetup->minBullyX, sqSetup->maxBullyX, sqSetup->minBullyZ, sqSetup->maxBullyZ, sqIdx, strainIdx, minStableFrames);
                                     }
                                 }
 
@@ -1158,7 +1162,7 @@ __global__ void find_collisions(int slideYaw, struct MiniSquishCancelSetup* sqSe
                                     testCollisionSpeed = simulate_bully_collision(marioVelX, marioVelZ, slideYaw, testSpeed, bullyAngle, xDist, zDist);
 
                                     if (testCollisionSpeed == slideSetup->forwardVel) {
-                                        check_bully_speed(estimatedSpeed, bullyAngle, sqSetup->minBullyX, sqSetup->maxBullyX, sqSetup->minBullyZ, sqSetup->maxBullyZ, sqIdx, strainIdx, minStableFrames);
+                                        check_bully_speed(testCollisionSpeed, bullyAngle, sqSetup->minBullyX, sqSetup->maxBullyX, sqSetup->minBullyZ, sqSetup->maxBullyZ, sqIdx, strainIdx, minStableFrames);
                                     }
                                 }
                             }
@@ -2288,13 +2292,15 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
     const float maxStrainSpeed = 10.0f;
 
     if (coss(intendedDYaw) < 0.0) {
-        float minLossFactor = departureSpeed / maxSpeed;
-        float maxLossFactor = departureSpeed / minSpeed;
+        const float slopeSpeed = accel * steepness;
+
+        float minLossFactor = departureSpeed / (maxSpeed + slopeSpeed);
+        float maxLossFactor = departureSpeed / fmaxf(minSpeed - slopeSpeed, 0.0f);
 
         float minForwardVel = -((((((minLossFactor - 0.92f) / 0.02f) / (mag / 32.0f)) / coss(intendedDYaw)) - 0.5f) * 100.0f / 0.5f);
         float maxForwardVel = -((((((maxLossFactor - 0.92f) / 0.02f) / (mag / 32.0f)) / coss(intendedDYaw)) - 0.5f) * 100.0f / 0.5f);
-
         maxForwardVel = fminf(maxMarioSpeed, maxForwardVel);
+
         float minXVel;
         float maxXVel;
         float minZVel;
@@ -2311,7 +2317,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
         float slidingStrainVel1 = xVel1 * coss(slideYaw) - zVel1 * sins(slideYaw);
 
         get_vel_ranges(minXVel, maxXVel, minZVel, maxZVel, mag, intendedDYaw, maxForwardVel, xVel0, zVel0);
-        get_estimate_sliding_speeds(minXVel, minZVel, xVel1, zVel1, mag, intendedDYaw, slopeAngle, accel, steepness);
+        get_estimate_sliding_speeds(maxXVel, maxZVel, xVel1, zVel1, mag, intendedDYaw, slopeAngle, accel, steepness);
 
         float slidingForwardVel2 = xVel1 * sins(slideYaw) + zVel1 * coss(slideYaw);
         float slidingStrainVel2 = xVel1 * coss(slideYaw) - zVel1 * sins(slideYaw);
@@ -2343,6 +2349,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingForwardVel2 < -maxSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2369,6 +2376,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingStrainVel1 < -maxStrainSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2395,6 +2403,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingStrainVel2 < -maxStrainSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2421,6 +2430,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingForwardVel1 > maxSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2447,6 +2457,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingForwardVel2 > maxSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2473,6 +2484,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingStrainVel1 > maxStrainSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2499,6 +2511,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     }
                 }
             }
+
             if (slidingStrainVel2 > maxStrainSpeed) {
                 float lowerSpeed = minForwardVel;
                 float upperSpeed = maxForwardVel;
@@ -2527,7 +2540,6 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
             }
 
             int nVels = *(int*)&maxForwardVel - *(int*)&minForwardVel;
-
             int nBlocks = (nVels + nThreads - 1) / nThreads;
 
             int nSlidingSetupsCPU = 0;
@@ -2588,7 +2600,7 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                             wf << slideYaw << ", " << x << ", " << y << ", ";
                             wf << slideSetup->forwardVel << ", " << slideSetup->xVel << ", " << slideSetup->zVel << ", " << slideCameraYaw << ", ";
                             wf << strainSetup->preStrainSpeed << ", " << strainSetup->strainStickX << ", " << strainSetup->strainStickY << ", " << strainSetup->cameraYaw << ", ";
-                            wf << strainSetup->postStrainSpeed << ", " << sqSetups->squishQSteps << ", " << sqSetup->pushAngle << ", ";
+                            wf << strainSetup->postStrainSpeed << ", " << sqSetup->squishQSteps << ", " << sqSetup->pushAngle << ", ";
                             wf << collisionSetup->bullyAngle << ", " << collisionSetup->bullySpeed << ", " << collisionSetup->framesStable << ", ";
                             wf << collisionSetup->minBullyX << ", " << collisionSetup->maxBullyX << ", " << collisionSetup->minBullyZ << ", " << collisionSetup->maxBullyZ << endl;
                         }
@@ -2745,7 +2757,7 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
     const float pushRadius = 115.0f;
     const float bullyHurtbox = 63.0f;
 
-    int angleRange = (((maxCollisionAngle >> 4) - (minCollisionAngle >> 4)) << 4);
+    int angleRange = (unsigned short)(((maxCollisionAngle >> 4) - (minCollisionAngle >> 4)) << 4);
 
     struct Polygon prevZone;
     copy_polygon(endZone, &prevZone);
@@ -3428,17 +3440,17 @@ int main()
 {
     int nThreads = 256;
 
-    Vec3f platformPos = { -2866.0f, -3225.0f, -715.0f };
-    Vec3f lakituPosition = { -14109.0f, -2918.0f, 2548.0f };
+    Vec3f platformPos = { -1945.0f, -3225.0f, -715.0f };
+    Vec3f lakituPosition = { -10000.0f, -2918.0f, 5000.0f };
 
-    Vec3f platformNormal = { 0.17944f, 0.87304f, -0.3936f };
-    Vec3f frame1Position = { 521437.75f, -3045.644775f, 2358217.5f };
+    Vec3f platformNormal = { -0.1985f, 0.86f, 0.375f };
+    Vec3f frame1Position = { -526269.0f, -3035.231689f, -2359672.0f };
 
-    float departureSpeed = 2676037.25f;
-    float departureXVel = 580820.0f;
-    float departureZVel = 2612244.75f;
+    float departureSpeed = 2674169.75f;
+    float departureXVel = -580422.375f;
+    float departureZVel = -2610420.25f;
 
-    int frame2Angle = 2012;
+    int frame2Angle = 34897;
 
     int baseCameraYaw = -8192;
 
@@ -3453,12 +3465,18 @@ int main()
 
     const float accel = 7.0f;
     const float minStartSpeed = 0.0f;
-    const float maxStartSpeed = 20.0f;
+    const float maxStartSpeed = 5.0f;
 
     const int minBullyHoverFrames = 500;
 
     string zoneFile = "zoneData.json";
     string strainFile = "strainData.csv";
+
+    minFallAngle = (minFallAngle >> 4) << 4;
+    maxFallAngle = (maxFallAngle >> 4) << 4;
+
+    minCollisionAngle = (minCollisionAngle >> 4) << 4;
+    maxCollisionAngle = (maxCollisionAngle >> 4) << 4;
 
     Vec3f beforeNormal = { (platformNormal[0] + (platformNormal[0] > 0 ? 0.01f : -0.01f)) + (platformNormal[0] > 0 ? 0.01f : -0.01f) , (platformNormal[1] - 0.01f) - 0.01f, (platformNormal[2] + (platformNormal[2] > 0 ? 0.01f : -0.01f)) + (platformNormal[2] > 0 ? 0.01f : -0.01f) };
     Vec3f offPlatformPosition = { 0.0f, 0.0f, 0.0f };
@@ -3542,7 +3560,6 @@ int main()
             nSquishSpots = 0;
 
             find_squish_spots(&platform0, &platform1, i, squishSpots, nSquishSpots);
-
             float ceilingEdge[2][2][2];
 
             int idx = 0;
@@ -3579,13 +3596,17 @@ int main()
                 find_collision_zones(&startPolygon, xPushVel, zPushVel, minCollisionAngle, maxCollisionAngle, &platform1, floorIdx, maxXPrecision, maxZPrecision, maxStartSpeed, squishSpots, nSquishSpots, sqSetups, nZones);
 
                 if (nZones > 0) {
-                    int minAngle = 65536;
-                    int maxAngle = -65536;
+                    int baseAngle = sqSetups[0].pushAngle;
+                    int minAngle = 0;
+                    int maxAngle = 0;
 
                     for (int k = 0; k < nZones; k++) {
-                        minAngle = std::min(minAngle, sqSetups[k].pushAngle);
-                        maxAngle = std::max(maxAngle, sqSetups[k].pushAngle);
+                        minAngle = std::min(minAngle, (int)(short)(sqSetups[k].pushAngle-baseAngle));
+                        maxAngle = std::max(maxAngle, (int)(short)(sqSetups[k].pushAngle-baseAngle));
                     }
+
+                    minAngle = (unsigned short)(minAngle + baseAngle);
+                    maxAngle = (unsigned short)(maxAngle + baseAngle);
 
                     write_zone_data(departureXVel, departureZVel, sqSetups, nZones, first, zn);
 
