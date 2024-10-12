@@ -15,7 +15,7 @@
 # define M_PI                  3.14159265358979323846  /* pi */
 # define MAX_SQUISH_SPOTS      5000
 # define MAX_ZONES             2000
-# define MAX_COLLISION_SETUPS  500000
+# define MAX_COLLISION_SETUPS  2500000
 # define MAX_STRAIN_SETUPS     500000
 # define MAX_SLIDE_SETUPS      100000000
 
@@ -1737,15 +1737,8 @@ void update_polygon(struct Polygon* poly, Platform* plat) {
     for (int x = minXI; x <= maxXI; x++) {
         for (int z = minZI; z <= maxZI; z++) {
             Vec3f squarePos = { (float)x, 0.0f, (float)z };
-            if (point_in_polygon(squarePos, poly)) {
-                float fHeight;
-                const Surface* f1 = find_floor(squarePos, plat->triangles, &fHeight);
-
-                grid[(z - minZI) * (maxXI - minXI + 1) + x - minXI] = f1;
-            }
-            else {
-                grid[(z - minZI) * (maxXI - minXI + 1) + x - minXI] = false;
-            }
+            float fHeight;
+            grid[(z - minZI) * (maxXI - minXI + 1) + x - minXI] = find_floor(squarePos, plat->triangles, &fHeight);
         }
     }
 
@@ -2268,19 +2261,21 @@ __global__ void try_forward_velG(const float minVel, const float maxVel, const f
 
         get_vel_rangesG(minXVel, maxXVel, minZVel, maxZVel, mag, intendedDYaw, vel, xVel0, zVel0);
 
-        float xVel = (minXVel + maxXVel) / 2.0;
-        float zVel = (minZVel + maxZVel) / 2.0;
+        if (minXVel <= maxXVel && minZVel <= maxZVel) {
+            float xVel = (minXVel + maxXVel) / 2.0;
+            float zVel = (minZVel + maxZVel) / 2.0;
 
-        float xVel1;
-        float zVel1;
+            float xVel1;
+            float zVel1;
 
-        get_estimate_sliding_speedsG(xVel, zVel, xVel1, zVel1, mag, intendedDYaw, slopeAngle, accel, steepness);
+            get_estimate_sliding_speedsG(xVel, zVel, xVel1, zVel1, mag, intendedDYaw, slopeAngle, accel, steepness);
 
-        float slidingForwardVel = xVel1 * sinsG(slideYaw) + zVel1 * cossG(slideYaw);
-        float slidingStrainVel = xVel1 * cossG(slideYaw) - zVel1 * sinsG(slideYaw);
+            float slidingForwardVel = xVel1 * sinsG(slideYaw) + zVel1 * cossG(slideYaw);
+            float slidingStrainVel = xVel1 * cossG(slideYaw) - zVel1 * sinsG(slideYaw);
 
-        if (fabsf(slidingForwardVel) <= maxSpeed && fabsf(slidingStrainVel) <= maxStrainSpeed) {
-            find_sliding_speedsG(vel, xVel, zVel, xVel1, zVel1, mag, intendedDYaw, slopeAngle, accel, steepness);
+            if (fabsf(slidingForwardVel) <= maxSpeed && fabsf(slidingStrainVel) <= maxStrainSpeed) {
+                find_sliding_speedsG(vel, xVel, zVel, xVel1, zVel1, mag, intendedDYaw, slopeAngle, accel, steepness);
+            }
         }
     }
 }
@@ -2576,10 +2571,10 @@ void try_intended_yaw(int x, int y, float mag, int intendedDYaw, int slideYaw, i
                     find_collisions<<<nBlocks, nThreads>>>(slideYaw, sqSetupsGPU, nZones, maxBullySpeed, minStableFrames);
                     cudaMemcpyFromSymbol(&nCollisionSetupsCPU, nCollisionSetups, sizeof(int), 0, cudaMemcpyDeviceToHost);
 
-                    if (nStrainSetupsCPU > 0) {
-                        if (nStrainSetupsCPU > MAX_COLLISION_SETUPS) {
+                    if (nCollisionSetupsCPU > 0) {
+                        if (nCollisionSetupsCPU > MAX_COLLISION_SETUPS) {
                             fprintf(stderr, "Warning: The maximum number of bully collision setups has been exceeded. No more will be recorded. Increase the internal maximum to prevent this from happening.\n");
-                            nStrainSetupsCPU = MAX_COLLISION_SETUPS;
+                            nCollisionSetupsCPU = MAX_COLLISION_SETUPS;
                         }
 
                         struct CollisionSetup* collisionSetupsCPU = (struct CollisionSetup*)std::malloc(nCollisionSetupsCPU * sizeof(struct CollisionSetup));
@@ -2935,7 +2930,7 @@ void find_collision_zones(struct Polygon* endZone, float xPushVel, float zPushVe
                                 if (refAngleSpot != 65536) {
                                     int angleDiff = (short)(angle - refAngleSpot);
 
-                                    if (minDistSpot >= 2.0f * maxStartSpeed + 1.85f && maxDistSpot <= bullyHurtbox && minAngleSpot <= angleDiff && maxAngleSpot >= angleDiff) {
+                                    if (minDistSpot <= bullyHurtbox && maxDistSpot >= fmaxf(0.0f, bullyHurtbox - (2.0f * maxStartSpeed + 1.85f)) && minAngleSpot <= angleDiff && maxAngleSpot >= angleDiff) {
                                         anglePointIdxs[nAnglePoints] = k;
                                         nAnglePoints++;
 
